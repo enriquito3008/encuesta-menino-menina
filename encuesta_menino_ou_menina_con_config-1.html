@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#f7f8fc">
+<title>¿Niño o niña? | Menino ou menina?</title>
+<style>
+:root{--blue:#75baf4;--pink:#f1a6c9;--ink:#29334a;--muted:#68748a}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;padding:18px;display:grid;place-items:center;background:linear-gradient(135deg,#eaf5ff,#fff0f7);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--ink)}
+main{width:min(100%,490px);background:#fff;border-radius:28px;padding:clamp(20px,5vw,30px);box-shadow:0 18px 55px #7184a522}
+header{text-align:center}.eyebrow{font-size:12px;letter-spacing:2px;color:#7b8497;font-weight:800}
+h1{font-size:clamp(27px,7vw,38px);line-height:1.15;margin:10px 0}p{color:var(--muted);line-height:1.55;margin:10px 0}
+.tagline{font-size:14px}.options{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:23px 0 14px}
+.choice{border:2px solid transparent;border-radius:20px;padding:17px 8px;cursor:pointer;font-size:18px;font-weight:800;transition:transform .18s,border-color .18s;min-width:0}
+.choice span{display:block;font-size:clamp(36px,10vw,52px);margin-bottom:8px}.boy{background:#e8f4ff;color:#256aa8}.girl{background:#fff0f6;color:#b34e82}.choice:hover{transform:translateY(-2px)}.choice:focus-visible{outline:3px solid var(--ink);outline-offset:2px}.choice:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.status{text-align:center;min-height:24px;font-size:13px;color:#69758a;margin:8px 0 16px}
+.results{border-top:1px solid #edf0f5;padding-top:19px}.results h2{font-size:18px;margin:0 0 16px}
+.result{margin:16px 0}.label{display:flex;justify-content:space-between;font-weight:750;margin-bottom:8px}.track{height:14px;background:#edf0f5;border-radius:99px;overflow:hidden}.bar{height:100%;width:0;border-radius:99px;transition:width .65s ease}.bar.blue{background:linear-gradient(90deg,#a4d7ff,#5ca8ee)}.bar.pink{background:linear-gradient(90deg,#ffc8e1,#e88db8)}
+.total{text-align:center;font-size:13px;color:#7b8497;margin:17px 0 4px}.live{text-align:center;font-size:11px;color:#7b8497;margin-top:14px}.dot{display:inline-block;width:7px;height:7px;background:#50b783;border-radius:50%;margin-right:5px}
+.footer{text-align:center;font-size:11px;color:#9aa2b1;margin-top:20px}
+</style>
+</head>
+<body><main>
+<header><div class="eyebrow">💗 UMA GRANDE SURPRESA / UNA GRAN SORPRESA 💙</div>
+<h1>¿Será niño o niña?<br><span style="font-size:.7em">Menino ou menina?</span></h1>
+<p class="tagline">¡Haz tu apuesta! / Dê seu palpite!<br>¿Qué crees que será el bebé? / O que você acha que será o bebê?</p></header>
+<div class="options">
+<button class="choice boy" id="boy" aria-label="Votar niño, menino"><span>👶🏻💙</span>Niño<br><small>Menino</small></button>
+<button class="choice girl" id="girl" aria-label="Votar niña, menina"><span>👶🏻💗</span>Niña<br><small>Menina</small></button>
+</div>
+<div class="status" id="status" role="status">Elige una opción para votar. / Escolha uma opção para votar.</div>
+<section class="results" aria-live="polite"><h2>📊 Resultados / Resultados</h2>
+<div class="result"><div class="label"><span>💙 Niño / Menino</span><span id="bp">0%</span></div><div class="track"><div class="bar blue" id="bb"></div></div></div>
+<div class="result"><div class="label"><span>💗 Niña / Menina</span><span id="gp">0%</span></div><div class="track"><div class="bar pink" id="gb"></div></div></div>
+<div class="total" id="total">0 votos / 0 votos</div></section>
+<div class="live" id="live"><span class="dot"></span>Resultados en vivo / Resultados ao vivo</div>
+<div class="footer">Cada navegador puede votar una vez. / Cada navegador pode votar uma vez.</div>
+</main>
+<script type="module">
+/*
+CONFIGURACIÓN FIREBASE:
+1) Crea un proyecto en https://console.firebase.google.com
+2) Registra una app web y copia sus datos de configuración debajo.
+3) Activa Firestore Database.
+4) Publica reglas de seguridad apropiadas (guía en el archivo de instrucciones).
+5) Hospeda este HTML en un sitio HTTPS.
+*/
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+import { getFirestore, doc, onSnapshot, runTransaction, setDoc } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCsaYjBi90dUJvD1_5ei7nEPA0jLCPaQyM",
+  authDomain: "encuesta-menino-menina.firebaseapp.com",
+  projectId: "encuesta-menino-menina",
+  storageBucket: "encuesta-menino-menina.firebasestorage.app",
+  messagingSenderId: "503604264776",
+  appId: "1:503604264776:web:d5fee04277cdf409eefd7d"
+};
+
+const statusEl=document.getElementById("status");
+const buttons=[document.getElementById("boy"),document.getElementById("girl")];
+const votedKey="genderPoll_voted_v1";
+let alreadyVoted=localStorage.getItem(votedKey)==="yes";
+function setStatus(text){statusEl.textContent=text}
+function render(boy,girl){
+ const total=boy+girl, bp=total?Math.round(boy/total*100):0, gp=total?100-bp:0;
+ document.getElementById("bp").textContent=bp+"%";
+ document.getElementById("gp").textContent=gp+"%";
+ document.getElementById("bb").style.width=bp+"%";
+ document.getElementById("gb").style.width=gp+"%";
+ document.getElementById("total").textContent=total+" "+(total===1?"voto / voto":"votos / votos");
+}
+function setVotingState(){if(alreadyVoted){buttons.forEach(b=>b.disabled=true);setStatus("¡Gracias por votar! / Obrigado por votar!");}}
+setVotingState();
+
+if(firebaseConfig.apiKey.startsWith("REEMPLAZA")||firebaseConfig.projectId.startsWith("REEMPLAZA")){
+ document.getElementById("live").innerHTML="⚙️ Firebase aún no está configurado. / Firebase ainda não está configurado.";
+ setStatus("Añade tus datos de Firebase al código para activar votos compartidos. / Adicione seus dados Firebase ao código.");
+ buttons.forEach(b=>b.disabled=true);
+}else{
+ try{
+  const app=initializeApp(firebaseConfig), db=getFirestore(app);
+  const pollRef=doc(db,"polls","genderReveal");
+  onSnapshot(pollRef,snap=>{
+   const data=snap.exists()?snap.data():{boy:0,girl:0};
+   render(Number(data.boy||0),Number(data.girl||0));
+  },err=>{setStatus("No se pudieron cargar resultados. Revisa Firebase y sus reglas.");console.error(err)});
+  async function vote(choice){
+   if(alreadyVoted)return;
+   buttons.forEach(b=>b.disabled=true);setStatus("Registrando voto… / Registrando voto…");
+   try{
+    await runTransaction(db,async transaction=>{
+     const snap=await transaction.get(pollRef);
+     const data=snap.exists()?snap.data():{boy:0,girl:0};
+     transaction.set(pollRef,{boy:Number(data.boy||0)+(choice==="boy"?1:0),girl:Number(data.girl||0)+(choice==="girl"?1:0)});
+    });
+    localStorage.setItem(votedKey,"yes");alreadyVoted=true;
+    setStatus("¡Voto registrado! / Voto registrado!");setVotingState();
+   }catch(err){console.error(err);buttons.forEach(b=>b.disabled=false);setStatus("Error al votar. Intenta otra vez. / Erro ao votar. Tente novamente.")}
+  }
+  document.getElementById("boy").addEventListener("click",()=>vote("boy"));
+  document.getElementById("girl").addEventListener("click",()=>vote("girl"));
+ }catch(err){console.error(err);setStatus("Error iniciando Firebase. Revisa la configuración.");}
+}
+</script></body></html>
